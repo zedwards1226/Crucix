@@ -233,11 +233,7 @@ app.use(express.static(join(ROOT, 'dashboard/public')));
 
 // Serve loading page until first sweep completes, then the dashboard
 app.get('/', (req, res) => {
-  if (!currentData) {
-    res.sendFile(join(ROOT, 'dashboard/public/loading.html'));
-  } else {
-    res.sendFile(join(ROOT, 'dashboard/public/jarvis.html'));
-  }
+  res.sendFile(join(ROOT, 'public/index.html'));
 });
 
 // API: current data
