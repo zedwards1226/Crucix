@@ -688,5 +688,145 @@ document.querySelectorAll('.region-btn').forEach(btn=>{
   });
 });
 </script>
+
+<script>
+// ── FETCH REAL DATA FROM CRUCIX BACKEND ──────────────────────
+async function fetchLiveData() {
+  try {
+    const res = await fetch('/api/data');
+    if (!res.ok) return;
+    const d = await res.json();
+
+    // Update markets ticker
+    if (d.energy) {
+      updateTicker('OIL/WTI', d.energy.wti);
+      updateTicker('NAT GAS', d.energy.natgas);
+      updateTicker('BRENT', d.energy.brent);
+    }
+
+    // Update FRED data (VIX, rates etc)
+    if (d.fred) {
+      const vix = d.fred.find(f => f.id === 'VIXCLS');
+      const hy = d.fred.find(f => f.id === 'BAMLH0A0HYM2');
+      if (vix?.value) {
+        document.querySelectorAll('.gauge-value').forEach(el => {
+          if (el.previousElementSibling?.textContent?.includes('VIX')) {
+            el.textContent = vix.value;
+          }
+        });
+      }
+    }
+
+    // Update stat cards with real numbers
+    if (d.conflict) {
+      const conflictEl = document.querySelector('.stat-card.red .stat-value');
+      if (conflictEl && d.conflict.events) conflictEl.textContent = d.conflict.events;
+    }
+
+    if (d.meta) {
+      const sourcesEl = document.querySelector('.stat-card.green .stat-value');
+      if (sourcesEl) sourcesEl.textContent = d.meta.sourcesOk + '/' + d.meta.sourcesQueried;
+    }
+
+    // Update signals count
+    if (d.tg?.posts) {
+      const sigEl = document.querySelector('.stat-card.orange .stat-value');
+      if (sigEl) sigEl.textContent = d.tg.posts;
+    }
+
+    // Update space watch
+    if (d.space) {
+      const starlink = document.querySelector('.space-value');
+      if (starlink && d.space.starlink) starlink.textContent = d.space.starlink.toLocaleString();
+    }
+
+    // Update nuclear/radiation
+    if (d.nuclear?.sites) {
+      const sites = d.nuclear.sites;
+      document.querySelectorAll('.radiation-site').forEach((el, i) => {
+        if (sites[i]) {
+          const valEl = el.querySelector('.rad-value');
+          const locEl = el.querySelector('.rad-location');
+          if (valEl) valEl.textContent = sites[i].value || '--';
+          if (locEl) locEl.textContent = sites[i].name || sites[i].location || locEl.textContent;
+        }
+      });
+    }
+
+    // Update OSINT feed with real posts
+    if (d.tg?.posts_list?.length > 0) {
+      const feed = document.querySelector('#section-osint .signal-list');
+      if (feed) {
+        feed.innerHTML = d.tg.posts_list.slice(0,10).map(p => `
+          <div class="osint-item">
+            <div class="osint-meta">
+              <span class="osint-channel">${p.channel || 'OSINT'}</span>
+              <span class="osint-time">${new Date(p.date || Date.now()).toUTCString().split(' ')[4]} UTC</span>
+            </div>
+            <div class="osint-text">${(p.text || '').substring(0,200)}</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Update live signals with real data
+    if (d.news?.length > 0) {
+      const sigList = document.querySelector('#section-signals .signal-list');
+      if (sigList) {
+        sigList.innerHTML = d.news.slice(0,10).map(n => `
+          <div class="signal-item ${n.severity || 'info'}" onclick="openModal('${(n.title||'').replace(/'/g,"\'")}','${(n.summary||n.title||'').replace(/'/g,"\'")}')">
+            <div class="signal-header">
+              <span class="signal-source">${n.source || 'NEWS'}</span>
+              <span class="signal-time">${new Date(n.date || Date.now()).toUTCString().split(' ')[4]} UTC</span>
+            </div>
+            <div class="signal-text">${(n.title || '').substring(0,120)}</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Update futures with real oil price
+    if (d.energy?.wti) {
+      document.querySelectorAll('.fut-price').forEach(el => {
+        const card = el.closest('.futures-card');
+        if (card?.querySelector('.fut-name')?.textContent?.includes('OIL')) {
+          el.textContent = '$' + parseFloat(d.energy.wti).toFixed(2);
+        }
+      });
+    }
+
+    console.log('[WarRoom] Live data loaded from Crucix backend');
+  } catch(e) {
+    console.log('[WarRoom] Backend data fetch failed:', e.message);
+  }
+}
+
+// Fetch on load and every 60 seconds
+fetchLiveData();
+setInterval(fetchLiveData, 60000);
+
+// SSE live updates from his backend
+try {
+  const evtSource = new EventSource('/events');
+  evtSource.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'update') {
+      fetchLiveData();
+      console.log('[WarRoom] Live update received from backend');
+    }
+  };
+} catch(e) {}
+
+function updateTicker(name, value) {
+  if (!value) return;
+  document.querySelectorAll('.ticker-item').forEach(el => {
+    if (el.querySelector('.name')?.textContent === name) {
+      const priceNode = el.childNodes[1];
+      if (priceNode) priceNode.textContent = ' $' + parseFloat(value).toFixed(2) + ' ';
+    }
+  });
+}
+</script>
+
 </body>
 </html>
